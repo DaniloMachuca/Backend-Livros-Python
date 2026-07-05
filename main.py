@@ -17,9 +17,23 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI()
+app = FastAPI(
+    title = "Api de Livros",
+    description = "Api para gerenciar catálogo de livros",
+    version = "0.0.0",
+    contact= {
+        "name": "Danilo Machuca",
+        "url": "https://github.com/DaniloMachuca",
+        "email": "danilo.machuca.dev@gmail.com"
+    }
+)
 
 livros = {}
+
+# id do livro
+# nome do livro
+# autor do livro
+# ano de lançamento do livro
 
 class Livro(BaseModel):
     nome_livro: str
@@ -32,11 +46,6 @@ def get_livros():
         raise HTTPException(status_code=404, detail="Nenhum livro encontrado")
     else:
         return {"livros": livros}
-
-# id do livro
-# nome do livro
-# autor do livro
-# ano de lançamento do livro
 
 @app.post("/adiciona")
 def post_Livro(id_livro: int, livro: Livro):
