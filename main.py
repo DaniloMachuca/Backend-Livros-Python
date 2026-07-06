@@ -68,12 +68,14 @@ def get_livros(page: int = 1, limit: int = 10, credentials: HTTPBasicCredentials
     if not livros:
         raise HTTPException(status_code=404, detail="Nenhum livro encontrado")
 
+    livros_sorted = sorted(livros.items(), key=lambda item: item[0])
+
     start = (page - 1) * limit
     end = start + limit
 
     livros_list = [
         {"id_livro": id_livro, "nome_livro": livro_data["nome_livro"], "autor_livro": livro_data["autor_livro"], "ano_livro": livro_data["ano_livro"]}
-        for id_livro, livro_data in list(livros.items())[start:end]
+        for id_livro, livro_data in livros_sorted[start:end]
     ]
 
     return {"page": page, "limit": limit, "livros": livros_list}
