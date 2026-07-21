@@ -21,7 +21,3 @@ services:
         "--port",
         "8000",
       ]
-      deploy:
-        replicas: 3
-        restart_policy:
-          condition: on-failure
