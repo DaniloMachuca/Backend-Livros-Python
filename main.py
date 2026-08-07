@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from typing import Optional
 import secrets
 import os
+import asyncio
 
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
@@ -87,9 +88,41 @@ def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
                 headers={"WWW-Authenticate": "Basic"}
             )
 
+# Simulação de chamadas externas
+
+async def chamadas_externas_1():
+    await asyncio.sleep(2)
+    return "Resultado da chamada externa 1"
+
+async def chamadas_externas_2():
+    await asyncio.sleep(2)
+    return "Resultado da chamada externa 2"
+
+async def chamadas_externas_3():
+    await asyncio.sleep(2)
+    return "Resultado da chamada externa 3"
+
+@app.get("/chamadas_externas")
+async def chamadas_externas():
+    tarefa1 = asyncio.create_task(chamadas_externas_1())
+    tarefa2 = asyncio.create_task(chamadas_externas_2())
+    tarefa3 = asyncio.create_task(chamadas_externas_3())
+
+    resultado1 = await tarefa1
+    resultado2 = await tarefa2
+    resultado3 = await tarefa3
+
+    return {
+        "message": "Chamadas externas concluidas",
+        "chamada_1": resultado1,
+        "chamada_2": resultado2,
+        "chamada_3": resultado3
+    }
+
+# Fim da simulação de chamadas externas
 
 @app.get("/livros")
-def get_livros(
+async def get_livros(
     page: int = 1,
     limit: int = 10,
     db: Session = Depends(session_db),
@@ -122,7 +155,7 @@ def get_livros(
 
 
 @app.post("/adiciona")
-def post_Livro(
+async def post_Livro(
     livro: Livro,
     db: Session = Depends(session_db),
     credentials: HTTPBasicCredentials = Depends(autenticar_usuario)
@@ -145,7 +178,7 @@ def post_Livro(
     return {"message": "Livro adicionado com sucesso", "livro": livro}
 
 @app.put("/atualiza/{id_livro}")
-def put_Livro(
+async def put_Livro(
     id_livro: int,
     livro: Livro,
     db: Session = Depends(session_db),
@@ -166,7 +199,7 @@ def put_Livro(
     return {"message": "Livro atualizado com sucesso", "livro": livro}
 
 @app.delete("/deletar/{id_livro}")
-def delete_Livro(
+async def delete_Livro(
     id_livro: int,
     db: Session = Depends(session_db),
     credentials: HTTPBasicCredentials = Depends(autenticar_usuario)
