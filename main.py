@@ -20,6 +20,11 @@ from typing import Optional
 import secrets
 import os
 import asyncio
+import redis
+import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
@@ -30,6 +35,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
 app = FastAPI(
     title = "Api de Livros",
@@ -68,6 +75,12 @@ class Livro(BaseModel):
     ano_livro: int
 
 Base.metadata.create_all(bind=engine)
+
+def salvar_livros_no_redis(livro_id: int, livro: Livro):
+    redis_client.set(f"livro:{livro_id}", json.dumps(livro.dict()))
+
+def deletar_livro_do_redis(livro_id: int):
+    redis_client.delete(f"livro:{livro_id}")
 
 def session_db():
      db = SessionLocal()
@@ -121,6 +134,21 @@ async def chamadas_externas():
 
 # Fim da simulação de chamadas externas
 
+@app.get("/debug/redis")
+async def ver_livros_redis():
+    chaves = redis_client.keys("livros:*")
+    livros = []
+    for chave in chaves:
+        valor = redis_client.get(chave)
+        ttl = redis_client.ttl(chave)
+        livros.append({
+            "chave": chave,
+            "valor": json.loads(valor),
+            "ttl": ttl
+        })
+    return livros
+
+
 @app.get("/livros")
 async def get_livros(
     page: int = 1,
@@ -131,6 +159,12 @@ async def get_livros(
     if page < 1 or limit < 1:
         raise HTTPException(status_code=400, detail="Parâmetros de página e limite devem ser maiores que zero")
 
+    cache_key = f"livros:page={page}&limit={limit}"
+    cached_livros = redis_client.get(cache_key)
+
+    if cached_livros:
+        return json.loads(cached_livros)
+
     livros_query = db.query(LivroDB).offset((page - 1) * limit).limit(limit).all()
 
     if not livros_query:
@@ -138,7 +172,7 @@ async def get_livros(
     
     total_livros = db.query(LivroDB).count()
 
-    return {
+    resposta = {
         "page": page,
         "limit": limit,
         "total": total_livros,
@@ -152,6 +186,10 @@ async def get_livros(
             for livro in livros_query
         ]
     }
+
+    redis_client.setex(cache_key, 30, json.dumps(resposta))
+
+    return resposta
 
 
 @app.post("/adiciona")
@@ -174,6 +212,8 @@ async def post_Livro(
     db.add(novo_livro)
     db.commit()
     db.refresh(novo_livro)
+
+    salvar_livros_no_redis(novo_livro.id, livro)
 
     return {"message": "Livro adicionado com sucesso", "livro": livro}
 
@@ -211,5 +251,7 @@ async def delete_Livro(
 
     db.delete(db_livro)
     db.commit()
+
+    deletar_livro_do_redis(id_livro)
 
     return {"message": "Livro deletado com sucesso"}
