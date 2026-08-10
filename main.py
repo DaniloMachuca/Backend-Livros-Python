@@ -13,7 +13,7 @@
 
 # Endpoint: http://127.0.0.1:8000
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import Optional
@@ -23,6 +23,9 @@ import asyncio
 import redis
 import json
 from dotenv import load_dotenv
+from tasks import somar, fatorial
+from celery_app import celery_app
+from celery.result import AsyncResult
 
 load_dotenv()
 
@@ -36,7 +39,10 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = os.getenv("REDIS_PORT", "6379")
+
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
 app = FastAPI(
     title = "Api de Livros",
@@ -89,6 +95,7 @@ def session_db():
      finally:
         db.close()
     
+# Função para autenticar o usuário usando HTTP Basic Auth
 
 def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
     is_username_correct = secrets.compare_digest(credentials.username, USUARIO)
@@ -132,8 +139,45 @@ async def chamadas_externas():
         "chamada_3": resultado3
     }
 
-# Fim da simulação de chamadas externas
 
+# Tarefas assíncronas com Celery
+
+@app.post("/calcular/soma")
+def calcular_soma(num1: int, num2: int):
+    tarefa = somar.delay(num1, num2)
+    redis_client.lpush("tarefas_ids", tarefa.id)
+    redis_client.ltrim("tarefas_ids", 0, 49)
+
+    return {"task_id": tarefa.id, "message": "Tarefa de soma iniciada. Verifique o status da tarefa usando o task_id."}
+
+@app.post("/calcular/fatorial")
+def calcular_fatorial(n: int):
+    tarefa = fatorial.delay(n)
+    redis_client.lpush("tarefas_ids", tarefa.id)
+    redis_client.ltrim("tarefas_ids", 0, 49)
+
+    return {"task_id": tarefa.id, "message": "Tarefa de fatorial iniciada. Verifique o status da tarefa usando o task_id."}
+
+
+@app.get("/tarefas/recentes")
+def listar_tarefas_recentes():
+    ids = redis_client.lrange("tarefas_ids", 0, -1)
+    tarefas = []
+
+    for task_id in ids:
+        resultado = AsyncResult(task_id, app=celery_app)
+        tarefas.append({
+            "task_id": task_id,
+            "status": resultado.status,
+            "resultado": resultado.result if resultado.successful() else None
+        })
+
+    return {
+        "message": "Lista de tarefas recentes",
+        "tarefas": tarefas
+    }
+
+# Endpoint para verificar o status da tarefa no redis
 @app.get("/debug/redis")
 async def ver_livros_redis():
     chaves = redis_client.keys("livros:*")
@@ -149,6 +193,7 @@ async def ver_livros_redis():
     return livros
 
 
+# Endpoint para buscar livros
 @app.get("/livros")
 async def get_livros(
     page: int = 1,
@@ -192,6 +237,7 @@ async def get_livros(
     return resposta
 
 
+# Endpoint para adicionar livros
 @app.post("/adiciona")
 async def post_Livro(
     livro: Livro,
@@ -217,6 +263,7 @@ async def post_Livro(
 
     return {"message": "Livro adicionado com sucesso", "livro": livro}
 
+# Endpoint para atualizar livros
 @app.put("/atualiza/{id_livro}")
 async def put_Livro(
     id_livro: int,
@@ -238,6 +285,7 @@ async def put_Livro(
 
     return {"message": "Livro atualizado com sucesso", "livro": livro}
 
+# Endpoint para deletar livros
 @app.delete("/deletar/{id_livro}")
 async def delete_Livro(
     id_livro: int,
