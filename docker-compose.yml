@@ -25,13 +25,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: livros-redis
+    container_name: books-redis
     ports:
       - "6379:6379"
 
   celery:
     build: .
-    container_name: livros-celery
+    container_name: books-celery
     command:
       [
         "poetry",
@@ -40,8 +40,6 @@ services:
         "-A",
         "celery_app:celery_app",
         "worker",
-        "-Q",
-        "livros",
         "--loglevel=info",
       ]
     volumes:

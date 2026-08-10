@@ -1,5 +1,5 @@
 [project]
-name = "backend-livros-python"
+name = "backend-books-python"
 version = "0.1.0"
 description = ""
 authors = [

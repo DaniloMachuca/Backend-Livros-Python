@@ -1,76 +1,62 @@
-# Backend Livros Python
+# Backend Books Python
 
-API simples para gerenciar um catálogo de livros com FastAPI, SQLAlchemy e SQLite.
+Simple API to manage a books catalog using FastAPI, SQLAlchemy and Redis (cache).
 
-## Requisitos
+**Requirements**
 
-- Python 3.14 ou superior
+- Python 3.10+ (tested with 3.11/3.12)
 - Poetry
-- Docker e Docker Compose (opcional)
+- Docker / Docker Compose (optional)
 
-## Dependências
-
-As dependências do projeto estão definidas em `pyproject.toml`:
-
-- `fastapi[standard]`
-- `sqlalchemy`
-- `aiosqlite`
-
-## Configuração
-
-O projeto usa variáveis de ambiente, normalmente definidas em `.env`:
+**Environment variables (.env)**
 
 ```env
-USUARIO=admin
-SENHA=admin
-DATABASE_URL=sqlite:///./livros.db
+USERNAME=admin
+PASSWORD=admin
+DATABASE_URL=sqlite:///./books.db
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_URL=redis://redis:6379/0
 PYTHONUNBUFFERED=1
 ```
 
-A variável `DATABASE_URL` deve apontar para o banco de dados SQLite.
-
-## Executando localmente
-
-1. Instale as dependências com Poetry:
+**Local installation**
 
 ```bash
 poetry install
-```
-
-2. Execute a aplicação:
-
-```bash
 poetry run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-3. Acesse a API em:
-
-- `http://127.0.0.1:8000`
-- Documentação automática: `http://127.0.0.1:8000/docs`
-
-## Executando com Docker Compose
-
-1. Construa e inicie o serviço:
+**Running with Docker Compose**
 
 ```bash
 docker-compose up --build
 ```
 
-2. A API estará disponível em `http://127.0.0.1:8000`.
+**Useful URLs**
 
-## Autenticação
+- API root: http://127.0.0.1:8000
+- Swagger UI: http://127.0.0.1:8000/docs
 
-A API usa autenticação HTTP Basic para todas as rotas de livros. Os valores são definidos em `.env` como `USUARIO` e `SENHA`.
+**Authentication**
+The management routes use HTTP Basic. Configure `USERNAME` and `PASSWORD` in the `.env` file.
 
-## Endpoints principais
+**Main endpoints**
 
-- `GET /livros` - lista livros
-- `POST /adiciona` - adiciona livro
-- `PUT /atualiza/{id_livro}` - atualiza livro
-- `DELETE` não documentado mas mencionado no código como CRUD
-- `GET /chamadas_externas` - simulação de chamadas externas assíncronas
+- `GET /books` — List books (supports `page` and `limit` query params)
+- `POST /books` — Create a new book (body: `title`, `author`, `year`)
+- `PUT /books/{book_id}` — Update book by id
+- `DELETE /books/{book_id}` — Delete book by id
+- `GET /external-calls` — Simulated parallel external async calls
+- `POST /tasks/sum` — Start background Celery sum task (query params `num1` and `num2`)
+- `POST /tasks/factorial` — Start background Celery factorial task (query param `n`)
+- `GET /tasks/recent` — List recent Celery tasks (reads IDs from Redis)
+- `GET /debug/redis` — Inspect Redis keys related to books
 
-## Observações
+**Notes**
 
-- O banco SQLite será criado automaticamente ao iniciar a aplicação.
-- Caso use Docker, o volume `.:/app` garante que alterações no código sejam refletidas em tempo real.
+- The SQLite database file is created automatically on first run when `DATABASE_URL` points to a local file.
+- Redis is used as a cache and to store a list of Celery task IDs.
+- The Celery tasks are in `tasks.py` (`sum_task`, `factorial_task`).
+
+All routes, model names and environment variables in this README are in English.

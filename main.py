@@ -1,17 +1,14 @@
-# API de livros
+"""
+Books API
 
-# GET, POST, PUT, DELETE
+Supports basic CRUD operations for a books catalog.
 
-# POST - Adicionar novos livros (Create)
-# GET - Buscar dados dos livros (Read)
-# PUT - Atualizar informações dos livros (Update)
-# DELETE - deletar informações dos livros (Delete)
+Endpoints implement Create, Read, Update and Delete operations.
 
-# CRUD - Create, Read, Update, Delete
+Install dependencies with Poetry: poetry add "fastapi[standard]"
 
-# Instalar o fastapi no Poetry: poetry add "fastapi[standard]"
-
-# Endpoint: http://127.0.0.1:8000
+Service endpoint: http://127.0.0.1:8000
+"""
 
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -23,7 +20,7 @@ import asyncio
 import redis
 import json
 from dotenv import load_dotenv
-from tasks import somar, fatorial
+from tasks import sum_task, factorial_task
 from celery_app import celery_app
 from celery.result import AsyncResult
 
@@ -45,8 +42,8 @@ REDIS_PORT = os.getenv("REDIS_PORT", "6379")
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
 app = FastAPI(
-    title = "Api de Livros",
-    description = "Api para gerenciar catálogo de livros",
+    title = "Books API",
+    description = "API to manage a books catalog",
     version = "0.0.0",
     contact= {
         "name": "Danilo Machuca",
@@ -55,180 +52,192 @@ app = FastAPI(
     }
 )
 
-USUARIO = os.getenv("USUARIO")
-SENHA = os.getenv("SENHA")
+USERNAME = os.getenv("USERNAME")
+PASSWORD = os.getenv("PASSWORD")
 
 security = HTTPBasic()
 
-livros = {}
+books_cache = {}
 
-# id do livro
-# nome do livro
-# autor do livro
-# ano de lançamento do livro
-
-class LivroDB(Base):
-    __tablename__ = "Livros"
+class BookDB(Base):
+    __tablename__ = "books"
 
     id = Column(Integer, primary_key=True, index=True)
-    nome_livro = Column(String, index=True)
-    autor_livro = Column(String, index=True)
-    ano_livro = Column(Integer, index=True)
+    title = Column(String, index=True)
+    author = Column(String, index=True)
+    year = Column(Integer, index=True)
 
-class Livro(BaseModel):
-    nome_livro: str
-    autor_livro: str
-    ano_livro: int
+
+class Book(BaseModel):
+    title: str
+    author: str
+    year: int
 
 Base.metadata.create_all(bind=engine)
 
-def salvar_livros_no_redis(livro_id: int, livro: Livro):
-    redis_client.set(f"livro:{livro_id}", json.dumps(livro.dict()))
+def save_book_to_redis(book_id: int, book: Book):
+    """Save a book payload to Redis (simple cache).
 
-def deletar_livro_do_redis(livro_id: int):
-    redis_client.delete(f"livro:{livro_id}")
+    Key format: "book:<id>".
+    """
+    redis_client.set(f"book:{book_id}", json.dumps(book.dict()))
 
-def session_db():
-     db = SessionLocal()
-     try:
+def delete_book_from_redis(book_id: int):
+    """Delete a book entry from Redis by id."""
+    redis_client.delete(f"book:{book_id}")
+
+def get_db():
+    """Database session dependency.
+
+    Yields a SQLAlchemy session and ensures it is closed after use.
+    """
+    db = SessionLocal()
+    try:
         yield db
-     finally:
+    finally:
         db.close()
     
-# Função para autenticar o usuário usando HTTP Basic Auth
+def authenticate_user(credentials: HTTPBasicCredentials = Depends(security)):
+    """Authenticate incoming requests using HTTP Basic credentials.
 
-def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
-    is_username_correct = secrets.compare_digest(credentials.username, USUARIO)
-    is_password_correct = secrets.compare_digest(credentials.password, SENHA)
+    Raises HTTPException(401) when credentials are invalid.
+    """
+    is_username_correct = secrets.compare_digest(credentials.username, USERNAME)
+    is_password_correct = secrets.compare_digest(credentials.password, PASSWORD)
 
     if not (is_username_correct and is_password_correct):
         raise HTTPException(
-                status_code=401,
-                detail="Usuário ou senha incorretos",
-                headers={"WWW-Authenticate": "Basic"}
-            )
+            status_code=401,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Basic"}
+        )
 
-# Simulação de chamadas externas
+# Simulated external calls (async)
 
-async def chamadas_externas_1():
+async def external_call_1():
     await asyncio.sleep(2)
-    return "Resultado da chamada externa 1"
+    return "Result of external call 1"
 
-async def chamadas_externas_2():
+async def external_call_2():
     await asyncio.sleep(2)
-    return "Resultado da chamada externa 2"
+    return "Result of external call 2"
 
-async def chamadas_externas_3():
+async def external_call_3():
     await asyncio.sleep(2)
-    return "Resultado da chamada externa 3"
+    return "Result of external call 3"
 
-@app.get("/chamadas_externas")
-async def chamadas_externas():
-    tarefa1 = asyncio.create_task(chamadas_externas_1())
-    tarefa2 = asyncio.create_task(chamadas_externas_2())
-    tarefa3 = asyncio.create_task(chamadas_externas_3())
+@app.get("/external-calls")
+async def external_calls():
+    """Trigger several simulated external async calls in parallel."""
+    task1 = asyncio.create_task(external_call_1())
+    task2 = asyncio.create_task(external_call_2())
+    task3 = asyncio.create_task(external_call_3())
 
-    resultado1 = await tarefa1
-    resultado2 = await tarefa2
-    resultado3 = await tarefa3
+    result1 = await task1
+    result2 = await task2
+    result3 = await task3
 
     return {
-        "message": "Chamadas externas concluidas",
-        "chamada_1": resultado1,
-        "chamada_2": resultado2,
-        "chamada_3": resultado3
+        "message": "External calls completed",
+        "call_1": result1,
+        "call_2": result2,
+        "call_3": result3
     }
 
 
-# Tarefas assíncronas com Celery
+# Asynchronous background tasks (Celery)
 
-@app.post("/calcular/soma")
-def calcular_soma(num1: int, num2: int):
-    tarefa = somar.delay(num1, num2)
-    redis_client.lpush("tarefas_ids", tarefa.id)
-    redis_client.ltrim("tarefas_ids", 0, 49)
+@app.post("/tasks/sum")
+async def start_sum_task(num1: int, num2: int):
+    """Start an asynchronous sum task via Celery and return the task id."""
+    task = sum_task.delay(num1, num2)
+    redis_client.lpush("task_ids", task.id)
+    redis_client.ltrim("task_ids", 0, 49)
 
-    return {"task_id": tarefa.id, "message": "Tarefa de soma iniciada. Verifique o status da tarefa usando o task_id."}
+    return {"task_id": task.id, "message": "Sum task started. Check status with the task_id."}
 
-@app.post("/calcular/fatorial")
-def calcular_fatorial(n: int):
-    tarefa = fatorial.delay(n)
-    redis_client.lpush("tarefas_ids", tarefa.id)
-    redis_client.ltrim("tarefas_ids", 0, 49)
+@app.post("/tasks/factorial")
+async def start_factorial_task(n: int):
+    """Start an asynchronous factorial task via Celery and return the task id."""
+    task = factorial_task.delay(n)
+    redis_client.lpush("task_ids", task.id)
+    redis_client.ltrim("task_ids", 0, 49)
 
-    return {"task_id": tarefa.id, "message": "Tarefa de fatorial iniciada. Verifique o status da tarefa usando o task_id."}
+    return {"task_id": task.id, "message": "Factorial task started. Check status with the task_id."}
 
 
-@app.get("/tarefas/recentes")
-def listar_tarefas_recentes():
-    ids = redis_client.lrange("tarefas_ids", 0, -1)
-    tarefas = []
+@app.get("/tasks/recent")
+async def list_recent_tasks():
+    """Return recent Celery tasks stored in Redis with basic status info."""
+    ids = redis_client.lrange("task_ids", 0, -1)
+    tasks_list = []
 
     for task_id in ids:
-        resultado = AsyncResult(task_id, app=celery_app)
-        tarefas.append({
+        result = AsyncResult(task_id, app=celery_app)
+        tasks_list.append({
             "task_id": task_id,
-            "status": resultado.status,
-            "resultado": resultado.result if resultado.successful() else None
+            "status": result.status,
+            "result": result.result if result.successful() else None
         })
 
     return {
-        "message": "Lista de tarefas recentes",
-        "tarefas": tarefas
+        "message": "Recent tasks",
+        "tasks": tasks_list
     }
 
-# Endpoint para verificar o status da tarefa no redis
+# Endpoint to inspect Redis keys and cache
 @app.get("/debug/redis")
-async def ver_livros_redis():
-    chaves = redis_client.keys("livros:*")
-    livros = []
-    for chave in chaves:
-        valor = redis_client.get(chave)
-        ttl = redis_client.ttl(chave)
-        livros.append({
-            "chave": chave,
-            "valor": json.loads(valor),
+async def debug_redis():
+    """Inspect Redis keys related to books for debugging purposes."""
+    keys = redis_client.keys("books:*")
+    items = []
+    for key in keys:
+        value = redis_client.get(key)
+        ttl = redis_client.ttl(key)
+        items.append({
+            "key": key,
+            "value": json.loads(value) if value else None,
             "ttl": ttl
         })
-    return livros
+    return items
 
 
-# Endpoint para buscar livros
-@app.get("/livros")
-async def get_livros(
+# Endpoint to list books
+@app.get("/books")
+async def get_books(
     page: int = 1,
     limit: int = 10,
-    db: Session = Depends(session_db),
-    credentials: HTTPBasicCredentials = Depends(autenticar_usuario)
+    db: Session = Depends(get_db),
+    credentials: HTTPBasicCredentials = Depends(authenticate_user)
     ):
     if page < 1 or limit < 1:
-        raise HTTPException(status_code=400, detail="Parâmetros de página e limite devem ser maiores que zero")
+        raise HTTPException(status_code=400, detail="Page and limit must be greater than zero")
 
-    cache_key = f"livros:page={page}&limit={limit}"
-    cached_livros = redis_client.get(cache_key)
+    cache_key = f"books:page={page}&limit={limit}"
+    cached_books = redis_client.get(cache_key)
 
-    if cached_livros:
-        return json.loads(cached_livros)
+    if cached_books:
+        return json.loads(cached_books)
 
-    livros_query = db.query(LivroDB).offset((page - 1) * limit).limit(limit).all()
+    books_query = db.query(BookDB).offset((page - 1) * limit).limit(limit).all()
 
-    if not livros_query:
-        raise HTTPException(status_code=404, detail="Nenhum livro encontrado")
+    if not books_query:
+        raise HTTPException(status_code=404, detail="No books found")
     
-    total_livros = db.query(LivroDB).count()
+    total_books = db.query(BookDB).count()
 
     resposta = {
         "page": page,
         "limit": limit,
-        "total": total_livros,
-        "livros": [
+        "total": total_books,
+        "books": [
             {
-                "id": livro.id,
-                "nome_livro": livro.nome_livro,
-                "autor_livro": livro.autor_livro,
-                "ano_livro": livro.ano_livro
+                "id": book.id,
+                "title": book.title,
+                "author": book.author,
+                "year": book.year
             }
-            for livro in livros_query
+            for book in books_query
         ]
     }
 
@@ -237,69 +246,69 @@ async def get_livros(
     return resposta
 
 
-# Endpoint para adicionar livros
-@app.post("/adiciona")
-async def post_Livro(
-    livro: Livro,
-    db: Session = Depends(session_db),
-    credentials: HTTPBasicCredentials = Depends(autenticar_usuario)
+# Endpoint to create a book
+@app.post("/books")
+async def create_book(
+    book: Book,
+    db: Session = Depends(get_db),
+    credentials: HTTPBasicCredentials = Depends(authenticate_user)
     ):
-    db_livro = db.query(LivroDB).filter(LivroDB.nome_livro == livro.nome_livro, LivroDB.autor_livro == livro.autor_livro, LivroDB.ano_livro == livro.ano_livro).first()
+    db_book = db.query(BookDB).filter(BookDB.title == book.title, BookDB.author == book.author, BookDB.year == book.year).first()
 
-    if db_livro:
-        raise HTTPException(status_code=400, detail="Livro já existe no catálogo")
+    if db_book:
+        raise HTTPException(status_code=400, detail="Book already exists in the catalog")
 
-    novo_livro = LivroDB(
-        nome_livro=livro.nome_livro,
-        autor_livro=livro.autor_livro,
-        ano_livro=livro.ano_livro
+    new_book = BookDB(
+        title=book.title,
+        author=book.author,
+        year=book.year
     )
 
-    db.add(novo_livro)
+    db.add(new_book)
     db.commit()
-    db.refresh(novo_livro)
+    db.refresh(new_book)
 
-    salvar_livros_no_redis(novo_livro.id, livro)
+    save_book_to_redis(new_book.id, book)
 
-    return {"message": "Livro adicionado com sucesso", "livro": livro}
+    return {"message": "Book added successfully", "book": book}
 
-# Endpoint para atualizar livros
-@app.put("/atualiza/{id_livro}")
-async def put_Livro(
-    id_livro: int,
-    livro: Livro,
-    db: Session = Depends(session_db),
-    credentials: HTTPBasicCredentials = Depends(autenticar_usuario)
+# Endpoint to update a book
+@app.put("/books/{book_id}")
+async def update_book(
+    book_id: int,
+    book: Book,
+    db: Session = Depends(get_db),
+    credentials: HTTPBasicCredentials = Depends(authenticate_user)
     ):
-    db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
+    db_book = db.query(BookDB).filter(BookDB.id == book_id).first()
 
-    if not db_livro:
-        raise HTTPException(status_code=404, detail="Livro não encontrado")
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
     
-    db_livro.nome_livro = livro.nome_livro
-    db_livro.autor_livro = livro.autor_livro
-    db_livro.ano_livro = livro.ano_livro
+    db_book.title = book.title
+    db_book.author = book.author
+    db_book.year = book.year
 
     db.commit()
-    db.refresh(db_livro)
+    db.refresh(db_book)
 
-    return {"message": "Livro atualizado com sucesso", "livro": livro}
+    return {"message": "Book updated successfully", "book": book}
 
-# Endpoint para deletar livros
-@app.delete("/deletar/{id_livro}")
-async def delete_Livro(
-    id_livro: int,
-    db: Session = Depends(session_db),
-    credentials: HTTPBasicCredentials = Depends(autenticar_usuario)
+# Endpoint to delete a book
+@app.delete("/books/{book_id}")
+async def delete_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPBasicCredentials = Depends(authenticate_user)
     ):
-    db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
+    db_book = db.query(BookDB).filter(BookDB.id == book_id).first()
 
-    if not db_livro:
-        raise HTTPException(status_code=404, detail="Livro não encontrado")
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
 
-    db.delete(db_livro)
+    db.delete(db_book)
     db.commit()
 
-    deletar_livro_do_redis(id_livro)
+    delete_book_from_redis(book_id)
 
-    return {"message": "Livro deletado com sucesso"}
+    return {"message": "Book deleted successfully"}
