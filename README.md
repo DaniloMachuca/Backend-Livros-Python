@@ -6,7 +6,7 @@ Simple API to manage a books catalog using FastAPI, SQLAlchemy and Redis (cache)
 
 - Python 3.10+ (tested with 3.11/3.12)
 - Poetry
-- Docker / Docker Compose (optional)
+- Docker / Docker Compose
 
 **Environment variables (.env)**
 
@@ -44,9 +44,9 @@ The management routes use HTTP Basic. Configure `USERNAME` and `PASSWORD` in the
 **Main endpoints**
 
 - `GET /books` — List books (supports `page` and `limit` query params)
-- `POST /books` — Create a new book (body: `title`, `author`, `year`)
-- `PUT /books/{book_id}` — Update book by id
-- `DELETE /books/{book_id}` — Delete book by id
+- `POST /new-books` — Create a new book (body: `title`, `author`, `year`)
+- `PUT /edit-book/{book_id}` — Update book by id
+- `DELETE /delete-book/{book_id}` — Delete book by id
 - `GET /external-calls` — Simulated parallel external async calls
 - `POST /tasks/sum` — Start background Celery sum task (query params `num1` and `num2`)
 - `POST /tasks/factorial` — Start background Celery factorial task (query param `n`)
@@ -58,5 +58,3 @@ The management routes use HTTP Basic. Configure `USERNAME` and `PASSWORD` in the
 - The SQLite database file is created automatically on first run when `DATABASE_URL` points to a local file.
 - Redis is used as a cache and to store a list of Celery task IDs.
 - The Celery tasks are in `tasks.py` (`sum_task`, `factorial_task`).
-
-All routes, model names and environment variables in this README are in English.

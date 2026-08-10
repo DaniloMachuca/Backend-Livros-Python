@@ -247,7 +247,7 @@ async def get_books(
 
 
 # Endpoint to create a book
-@app.post("/books")
+@app.post("/new-book")
 async def create_book(
     book: Book,
     db: Session = Depends(get_db),
@@ -273,7 +273,7 @@ async def create_book(
     return {"message": "Book added successfully", "book": book}
 
 # Endpoint to update a book
-@app.put("/books/{book_id}")
+@app.put("/edit-book/{book_id}")
 async def update_book(
     book_id: int,
     book: Book,
@@ -295,7 +295,7 @@ async def update_book(
     return {"message": "Book updated successfully", "book": book}
 
 # Endpoint to delete a book
-@app.delete("/books/{book_id}")
+@app.delete("/delete-book/{book_id}")
 async def delete_book(
     book_id: int,
     db: Session = Depends(get_db),
