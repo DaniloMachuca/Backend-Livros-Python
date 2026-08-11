@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from tasks import sum_task, factorial_task
 from celery_app import celery_app
 from celery.result import AsyncResult
+from kafka_producer import send_event
 
 load_dotenv()
 
@@ -269,6 +270,11 @@ async def create_book(
     db.refresh(new_book)
 
     save_book_to_redis(new_book.id, book)
+
+    send_event("books_events", {
+        "action": "create",
+        "book": book.dict(),
+    })
 
     return {"message": "Book added successfully", "book": book}
 

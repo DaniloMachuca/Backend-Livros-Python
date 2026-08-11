@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   app:
     build: .
@@ -10,6 +8,10 @@ services:
       - .:/app
     env_file:
       - .env
+    environment:
+      - KAFKA_SERVER=kafka:9092
+    depends_on:
+      - kafka
     command:
       [
         "poetry",
@@ -48,3 +50,39 @@ services:
       - redis
     env_file:
       - .env
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: books-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_LOG_DIR: /tmp/zookeeper/log
+      ZOOKEEPER_DATA_DIR: /tmp/zookeeper/data
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: books-kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: books-zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: books-kafka-ui
+    ports:
+      - "8080:8080"
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
